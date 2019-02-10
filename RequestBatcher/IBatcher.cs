@@ -4,6 +4,7 @@
     using System.Threading.Tasks;
     using ResultType;
     using ResultType.Results;
+    using Strategy;
 
     public interface IBatcher<TMessage>
     {
