@@ -42,7 +42,7 @@ namespace RequestBatcher
                     batchBlock.TriggerBatch();
                     var data = await batchBlock.ReceiveAsync();
                     var toSend = strategy.Apply(data);
-                    triggerFunc(data);
+                    triggerFunc(toSend);
                 }
                 catch (Exception e)
                 {
