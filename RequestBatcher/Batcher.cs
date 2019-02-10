@@ -13,18 +13,17 @@ namespace RequestBatcher
    
     public class Batcher<TMessage> : IBatcher<TMessage>
     {
-        private readonly IStrategy<TMessage> _strategy;
-        private readonly BufferBlock<TMessage> BufferBlock = new BufferBlock<TMessage>(new DataflowBlockOptions
+        private readonly BufferBlock<TMessage> _bufferBlock = new BufferBlock<TMessage>(new DataflowBlockOptions
         {
             EnsureOrdered = true
         });
 
-        private readonly TransformBlock<TMessage, TMessage> BufferInterceptor = new TransformBlock<TMessage, TMessage>(x =>
+        private readonly TransformBlock<TMessage, TMessage> _bufferInterceptor = new TransformBlock<TMessage, TMessage>(x =>
         {
             Console.WriteLine($"Get a message with value: {x}");
             return x;
         });
-        private readonly TransformBlock<TMessage, TMessage> TimeoutInterceptor = new TransformBlock<TMessage, TMessage>(x =>
+        private readonly TransformBlock<TMessage, TMessage> _timeoutInterceptor = new TransformBlock<TMessage, TMessage>(x =>
         {
             Console.WriteLine($"Move out from transformation block with a value: {x}");
             return x;
@@ -32,7 +31,6 @@ namespace RequestBatcher
 
         public Batcher(int size, int interval, IStrategy<TMessage> strategy, Action<IEnumerable<TMessage>> triggerFunc)
         {
-            _strategy = strategy;
             var batchBlock = new BatchBlock<TMessage>(size, new GroupingDataflowBlockOptions()
             {
                 EnsureOrdered = true
@@ -43,7 +41,7 @@ namespace RequestBatcher
                 {
                     batchBlock.TriggerBatch();
                     var data = await batchBlock.ReceiveAsync();
-                    var toSend = _strategy.Apply(data);
+                    var toSend = strategy.Apply(data);
                     triggerFunc(data);
                 }
                 catch (Exception e)
@@ -57,17 +55,17 @@ namespace RequestBatcher
                 return v;
             });
             
-            TimeoutInterceptor.LinkTo(batchBlock);
-            timeoutBlock.LinkTo(TimeoutInterceptor);
-            BufferInterceptor.LinkTo(timeoutBlock);
-            BufferBlock.LinkTo(BufferInterceptor);    
+            _timeoutInterceptor.LinkTo(batchBlock);
+            timeoutBlock.LinkTo(_timeoutInterceptor);
+            _bufferInterceptor.LinkTo(timeoutBlock);
+            _bufferBlock.LinkTo(_bufferInterceptor);    
         }
 
         public async Task<Result<Unit>> SendAsync(TMessage msg, CancellationToken token = new CancellationToken())
         {
             try
             {
-                var result = await BufferBlock.SendAsync(msg, token);
+                var result = await _bufferBlock.SendAsync(msg, token);
                 return result
                     ? ResultFactory.CreateSuccess()
                     : ResultFactory.CreateFailure<Unit>("Message was refused by queue");
